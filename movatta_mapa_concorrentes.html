@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movatta — Mapa de Concorrentes</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F4F4F2; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; }
+
+  /* HEADER */
+  .header { background: #111111; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .header-title { color: #fff; font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
+  .header-sub { color: #888; font-size: 12px; margin-top: 2px; }
+  .header-badge { background: #2a2a2a; color: #ccc; font-size: 11px; padding: 4px 12px; border-radius: 20px; border: 1px solid #444; }
+
+  /* LAYOUT */
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .sidebar { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #e5e7e6; }
+  .map-panel { flex: 1; display: flex; flex-direction: column; }
+  #map { flex: 1; }
+
+  /* FILTERS */
+  .filters { padding: 12px 14px; border-bottom: 1px solid #e5e7e6; display: flex; gap: 6px; flex-wrap: wrap; background: #fafafa; }
+  .filters-label { font-size: 11px; color: #888; width: 100%; margin-bottom: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+  .fb { font-size: 12px; padding: 5px 12px; border: 1px solid #d1d5d3; border-radius: 20px; background: #fff; color: #555; cursor: pointer; transition: all 0.15s; }
+  .fb:hover { border-color: #111; color: #111; }
+  .fb.active { background: #111111; color: #fff; border-color: #111111; }
+
+  /* LIST */
+  .list { overflow-y: auto; flex: 1; padding: 10px; }
+  .card { border: 1px solid #e5e7e6; border-radius: 10px; margin-bottom: 7px; cursor: pointer; padding: 11px 13px; display: flex; align-items: flex-start; gap: 10px; transition: all 0.15s; background: #fff; }
+  .card:hover { border-color: #111; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .card.sel { border-color: #111111; border-width: 1.5px; background: #F7F5F2; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .d1 { background: #C0392B; } .d2 { background: #B5893A; } .d3 { background: #5A7A6A; }
+  .cn { font-size: 13px; font-weight: 600; line-height: 1.3; color: #1a1a1a; }
+  .cc { font-size: 11px; color: #888; margin-top: 2px; }
+  .cr { font-size: 11px; color: #B5893A; margin-top: 2px; }
+
+  /* DETAIL PANEL (bottom of map) */
+  .detail-panel { height: 320px; background: #fff; border-top: 1px solid #e5e7e6; overflow-y: auto; padding: 18px 22px; }
+  .detail-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 13px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 10px; }
+  .b1 { background: #FDECEA; color: #C0392B; } .b2 { background: #FDF5E4; color: #B5893A; } .b3 { background: #EEF2F0; color: #3A6B56; }
+  .dname { font-size: 18px; font-weight: 700; color: #111111; margin-bottom: 3px; }
+  .dcity { font-size: 12px; color: #888; margin-bottom: 6px; }
+  .dstars { font-size: 13px; color: #555; margin-bottom: 14px; font-weight: 500; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .dblock { background: #F8F9F8; border-radius: 8px; padding: 11px 13px; }
+  .dlbl { font-size: 10px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+  .dtxt { font-size: 12px; line-height: 1.6; color: #333; }
+  .obox { background: #F2F7F4; border-radius: 8px; padding: 11px 13px; margin-bottom: 10px; }
+  .obox .dlbl { color: #3A6B56; }
+  .obox .dtxt { color: #1A3A2A; }
+  .abox { background: #FDF5E4; border-radius: 8px; padding: 11px 13px; margin-bottom: 12px; }
+  .abox .dlbl { color: #B5893A; }
+  .abox .dtxt { color: #7A5C1E; }
+  .links { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { font-size: 12px; padding: 5px 14px; border: 1px solid #d1d5d3; border-radius: 20px; color: #555; text-decoration: none; cursor: pointer; transition: all 0.15s; }
+  .pill:hover { border-color: #111; color: #111; background: #F4F4F2; }
+  .pill.off { opacity: 0.35; pointer-events: none; }
+
+  /* LEGEND */
+  .map-legend { position: absolute; bottom: 28px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.95); border: 1px solid #e5e7e6; border-radius: 8px; padding: 9px 12px; font-size: 11px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .leg-row { display: flex; align-items: center; gap: 7px; color: #555; margin-bottom: 4px; }
+  .leg-row:last-child { margin-bottom: 0; }
+  .leg-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  /* POPUP custom */
+  .leaflet-popup-content-wrapper { border-radius: 10px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; }
+  .leaflet-popup-content { margin: 12px 16px !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; }
+  .popup-name { font-size: 13px; font-weight: 700; color: #111111; margin-bottom: 3px; }
+  .popup-city { font-size: 11px; color: #888; margin-bottom: 5px; }
+  .popup-seg { font-size: 12px; color: #B5893A; font-weight: 500; margin-bottom: 8px; }
+  .popup-btn { display: inline-block; background: #111111; color: #fff; font-size: 11px; padding: 5px 12px; border-radius: 20px; cursor: pointer; border: none; font-family: inherit; }
+  .popup-btn:hover { background: #333; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">Movatta — Mapeamento de Concorrentes</div>
+    <div class="header-sub">Sul + Sudeste do Brasil · 6 players analisados · Dossiê de Posicionamento 2026</div>
+  </div>
+  <div class="header-badge">Análise Estratégica</div>
+</div>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="filters">
+      <div class="filters-label">Filtrar por nível</div>
+      <button class="fb active" onclick="setF('all',this)">Todos (6)</button>
+      <button class="fb" onclick="setF('1',this)">🔴 Direto (2)</button>
+      <button class="fb" onclick="setF('2',this)">🟡 Conceitual (2)</button>
+      <button class="fb" onclick="setF('3',this)">🟢 Indireto (2)</button>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <!-- MAP + DETAIL -->
+  <div class="map-panel">
+    <div style="position:relative; flex:1; display:flex; flex-direction:column;">
+      <div id="map" style="flex:1;"></div>
+      <div class="map-legend">
+        <div class="leg-row"><div class="leg-dot" style="background:#111111;width:11px;height:11px;"></div><strong>Movatta — Indaial (você)</strong></div>
+        <div class="leg-row"><div class="leg-dot" style="background:#C0392B"></div>Concorrência direta</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#B5893A"></div>Concorrência conceitual</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#5A7A6A"></div>Concorrência indireta</div>
+      </div>
+    </div>
+    <div class="detail-panel" id="detail">
+      <div class="detail-empty">Selecione um concorrente na lista ou clique em um pin no mapa</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+var data = [
+  {id:0, n:1, name:"Massam Fitness", city:"São Paulo — SP", seg:"600k seguidores · Instagram",
+   pos:"Volume + Lifestyle acessível. Presente em Shopee, Magalu e redes sociais com alto volume de sorteios e promoções.",
+   analise:"Maior player em volume no segmento fitness acessível do Brasil. Bio 'moda fitness que valoriza, do treino ao casual'. Cresceu por alcance e desconto — estratégia que treina o consumidor a esperar promoção. Exatamente onde a Movatta corre risco de ser puxada se não houver diferenciação clara.",
+   just:"Mesmo público-alvo (mulheres 20–40, classe média), mesmo canal (Instagram), mesmo ticket aproximado. A Movatta compete diretamente pela atenção desse consumidor toda vez que entra no feed.",
+   opp:"Massam compete por preço e volume. A Movatta pode ganhar por identificação e marca — um ativo que o Massam nunca construiu e que não se copia com orçamento.",
+   alert:"Presença em marketplaces âncora o preço do segmento. Pode puxar a Movatta para o jogo de desconto se o posicionamento não estiver consolidado.",
+   site:"https://massam.com.br", ig:"massam.fitness", lat:-23.550, lng:-46.633},
+
+  {id:1, n:1, name:"Movitta", city:"Brasil — Online", seg:"11k seguidores · Instagram",
+   pos:"Marca em estágio inicial, nome fonético similar à Movatta. Posicionamento indefinido em moda fitness.",
+   analise:"Player de pequeno porte com nome fonético similar à Movatta — 'Movitta' vs 'Movatta'. 11k seguidores, sem proposta de valor clara, sem editorial consistente. Opera no mesmo segmento fitness feminino sem diferenciação declarada.",
+   just:"A similaridade fonética do nome gera risco de confusão de marca nas buscas e no reconhecimento. Mesmo estágio de crescimento, mesmo público, disputa o mesmo espaço mental.",
+   opp:"A Movatta pode solidificar reconhecimento de marca antes que a Movitta ganhe tração. Posicionamento claro é o principal diferenciador nesse empate de estágio.",
+   alert:"Confusão de nome pode prejudicar busca orgânica e recall de marca. Monitorar crescimento e possível aproximação de posicionamento.",
+   site:null, ig:"movitta", lat:-25.429, lng:-49.271},
+
+  {id:2, n:2, name:"DMFit", city:"São Paulo — SP", seg:"387k seguidores · Instagram",
+   pos:"Médio-premium + Lifestyle. Slogan 'Conforto em movimento'. Identidade visual consolidada, editorial consistente.",
+   analise:"A referência mais próxima do que a Movatta quer se tornar. Clara no posicionamento, consistente na identidade visual, público B+. Você olha um post e sabe que é DMFit antes de ler o nome. 387k seguidores construídos com disciplina editorial, não com volume de sorteio.",
+   just:"Mesmo território de lifestyle + funcionalidade, mas opera em ticket mais alto e público com maior poder aquisitivo. Não compete diretamente no preço, mas educa o mercado sobre o que uma marca fitness com ponto de vista parece.",
+   opp:"DMFit não fala para o corpo em processo nem para a mulher de rotina corrida de classe média. A Movatta pode capturar o espaço emocional que a DMFit deixa vago por ser aspiracional demais.",
+   alert:"Benchmark direto de comunicação. O que a DMFit faz em identidade visual e editorial define o padrão de percepção de qualidade do segmento.",
+   site:"https://dmfit.com.br", ig:"dmfit", lat:-23.560, lng:-46.645},
+
+  {id:3, n:2, name:"Moving Fitness Wear", city:"São Paulo — SP", seg:"187k seguidores · Instagram",
+   pos:"Médio + Lifestyle aspiracional. Trabalha coleções temáticas com foco em moda com função.",
+   analise:"Opera no espaço de moda com função — não função com moda. Coleções temáticas com foco em estética forte e apelo aspiracional. 187k seguidores com feed visualmente cuidado. Comunica aspira mais do que inclui — o oposto do que a Movatta propõe.",
+   just:"Disputa o mesmo público feminino fitness com comunicação de moda. Mais distante da vida real, mais próxima da aspiração estética. A mulher que a Moving atinge é a que a Movatta quer alcançar quando ela se sentir excluída pelo espelho da Moving.",
+   opp:"Aspira sem incluir. A Movatta pode capturar a mulher que se identifica com o estilo da Moving mas não se sente representada nos corpos que vê no feed.",
+   alert:"Grid esteticamente forte. Eleva o padrão visual esperado do segmento e cria expectativa visual no consumidor que a Movatta precisa alcançar.",
+   site:null, ig:"movingfitnesswear", lat:-23.548, lng:-46.655},
+
+  {id:4, n:3, name:"Live!", city:"Florianópolis — SC", seg:"Marca nacional · 308 lojas · R$500M faturamento",
+   pos:"Premium + Athleisure. Ticket médio R$500. Fabricação própria em SC. Posicionamento: 'inspirar pessoas a ter uma vida mais ativa, saudável e feliz'.",
+   analise:"Referência geográfica mais próxima — fabricação e sede em Santa Catarina. Opera em escala completamente diferente da Movatta: 308 lojas físicas, faturamento de R$500M, público A/B com ticket 3x maior. Flerta com lifestyle mas sem a narrativa de origem da fundadora.",
+   just:"Não compete diretamente pelo preço, mas educa o consumidor catarinense sobre qualidade têxtil local. Pode ser âncora de comparação inconsciente para quem conhece as duas marcas.",
+   opp:"A Live! não tem a narrativa da fundadora nem a identidade de mulher real no processo. A Movatta pode ocupar o espaço emocional que a Live! deixa vago por ser grande demais para ser próxima.",
+   alert:"Marca de SC com recurso infinitamente maior. O perigo não é competição direta — é ser percebida como versão barata da Live! sem propósito próprio.",
+   site:"https://www.live.com.br", ig:"livebr", lat:-27.595, lng:-48.548},
+
+  {id:5, n:3, name:"Cajubrasil", city:"São Paulo — SP", seg:"Atacado · Revenda · B2B fitness",
+   pos:"Atacado e revenda para moda fitness. Modelo B2B. Foca no revendedor, não no consumidor final.",
+   analise:"Opera no modelo atacado/revenda para lojistas de moda fitness. Não é concorrente direto no varejo, mas impacta o ecossistema de preços do segmento ao colocar volume de produto no mercado a custo baixo. Fornece para lojistas que depois competem com a Movatta no varejo.",
+   just:"Indiretamente pressiona o ticket médio do segmento. Lojistas revendendo Cajubrasil criam âncora de preço que o consumidor usa para comparar qualquer marca fitness.",
+   opp:"A Movatta não compete no atacado. Pode se posicionar claramente como marca própria com identidade — o oposto do produto de revenda sem rosto.",
+   alert:"Volume de produto no mercado infla a percepção de que moda fitness é commodidade barata. Dificulta justificar ticket sem posicionamento sólido.",
+   site:"https://cajubrasil.com.br", ig:"cajubrasil", lat:-23.542, lng:-46.620}
+];
+
+var COLORS = {1:'#C0392B', 2:'#B5893A', 3:'#5A7A6A'};
+var NIVEL_TXT = {1:'🔴 Direto', 2:'🟡 Conceitual', 3:'🟢 Indireto'};
+var BADGE_CLS = {1:'b1', 2:'b2', 3:'b3'};
+var DOT_CLS = {1:'d1', 2:'d2', 3:'d3'};
+var filter = 'all', sel = null;
+var map, markers = [];
+
+function renderList() {
+  var el = document.getElementById('list');
+  el.innerHTML = '';
+  data.forEach(function(c) {
+    if (filter !== 'all' && String(c.n) !== filter) return;
+    var d = document.createElement('div');
+    d.className = 'card' + (sel === c.id ? ' sel' : '');
+    d.innerHTML =
+      '<div class="dot ' + DOT_CLS[c.n] + '"></div>' +
+      '<div style="flex:1">' +
+        '<div class="cn">' + c.name + '</div>' +
+        '<div class="cc">' + c.city + '</div>' +
+        '<div class="cr">' + c.seg + '</div>' +
+      '</div>';
+    d.onclick = function() { pick(c.id); };
+    el.appendChild(d);
+  });
+}
+
+function pick(id) {
+  sel = id;
+  renderList();
+  var c = data.find(function(x) { return x.id === id; });
+  if (!c) return;
+
+  if (map) map.setView([c.lat, c.lng], 10, {animate: true});
+  markers.forEach(function(m) { if (m._cid === id) m.openPopup(); });
+
+  var sh = c.site ? '<a class="pill" href="' + c.site + '" target="_blank">🌐 Site</a>' : '<span class="pill off">Sem site</span>';
+  var ih = c.ig ? '<a class="pill" href="https://instagram.com/' + c.ig + '" target="_blank">📷 Instagram</a>' : '<span class="pill off">Sem Instagram</span>';
+
+  document.getElementById('detail').innerHTML =
+    '<div class="badge ' + BADGE_CLS[c.n] + '">' + NIVEL_TXT[c.n] + '</div>' +
+    '<div class="dname">' + c.name + '</div>' +
+    '<div class="dcity">📍 ' + c.city + '</div>' +
+    '<div class="dstars">' + c.seg + '</div>' +
+    '<div class="detail-grid">' +
+      '<div class="dblock"><div class="dlbl">Posicionamento</div><div class="dtxt">' + c.pos + '</div></div>' +
+      '<div class="dblock"><div class="dlbl">Análise do posicionamento</div><div class="dtxt">' + c.analise + '</div></div>' +
+      '<div class="dblock"><div class="dlbl">Justificativa da conclusão</div><div class="dtxt">' + c.just + '</div></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">' +
+      '<div class="obox"><div class="dlbl">✅ Oportunidade para a Movatta</div><div class="dtxt">' + c.opp + '</div></div>' +
+      '<div class="abox"><div class="dlbl">⚠️ Ponto de atenção</div><div class="dtxt">' + c.alert + '</div></div>' +
+    '</div>' +
+    '<div class="links">' + sh + ih + '</div>';
+}
+
+function setF(f, btn) {
+  filter = f;
+  document.querySelectorAll('.fb').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderList();
+  markers.forEach(function(m) {
+    var visible = f === 'all' || String(m._n) === f;
+    m.setOpacity(visible ? 1 : 0.15);
+  });
+}
+
+// Init map
+map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView([-25.2, -48.5], 6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 18
+}).addTo(map);
+
+// Movatta pin
+var movattaIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:18px;height:18px;border-radius:50%;background:#111111;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4)"></div>',
+  iconSize: [18, 18], iconAnchor: [9, 9]
+});
+L.marker([-26.897, -49.232], {icon: movattaIcon}).addTo(map)
+  .bindPopup('<div class="popup-name">Movatta</div><div class="popup-city">📍 Indaial — SC</div><div style="font-size:11px;color:#888;font-weight:600">Você está aqui</div>')
+  .openPopup();
+
+// Competitor pins
+data.forEach(function(c) {
+  var icon = L.divIcon({
+    className: '',
+    html: '<div style="width:14px;height:14px;border-radius:50%;background:' + COLORS[c.n] + ';border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)"></div>',
+    iconSize: [14, 14], iconAnchor: [7, 7]
+  });
+  var m = L.marker([c.lat, c.lng], {icon: icon}).addTo(map);
+  m.bindPopup(
+    '<div class="popup-name">' + c.name + '</div>' +
+    '<div class="popup-city">📍 ' + c.city + '</div>' +
+    '<div class="popup-seg">' + c.seg + '</div>' +
+    '<button class="popup-btn" onclick="pick(' + c.id + ')">Ver análise completa</button>'
+  );
+  m.on('click', function() { pick(c.id); });
+  m._cid = c.id;
+  m._n = c.n;
+  markers.push(m);
+});
+
+renderList();
+</script>
+</body>
+</html>
